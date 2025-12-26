@@ -7,9 +7,9 @@ from datetime import datetime
 # 1. KONFIGURASI & SETUP HALAMAN
 # ==========================================
 st.set_page_config(
-    page_title="Hoax Buster AI",
+    page_title="Cek Politik AI",
     page_icon="🛡️",
-    layout="wide", # Layout wide agar lebih lega
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -23,16 +23,16 @@ if 'history' not in st.session_state:
 @st.cache_resource
 def load_models():
     # Load Vectorizer
-    vect = joblib.load("vectorizer.pkl")
+    vect = joblib.load("tfidf_vectorizer.pkl")
     # Load Model Klasifikasi
     model = joblib.load("model_xgboost_under.pkl")
     return vect, model
 
 # Sidebar - Bagian Header & Status Model
 with st.sidebar:
-    st.title("🛡️ Hoax Buster AI")
+    st.title("🛡️ Cek Politik AI")
     st.markdown("---")
-    st.write("Sistem cerdas untuk memverifikasi kebenaran berita menggunakan **XGBoost**.")
+    st.write("Sistem cerdas untuk memverifikasi kebenaran berita menggunakan Machine Learning.")
     
     # Indikator Status Model
     try:
@@ -63,68 +63,77 @@ def simpan_riwayat(teks, label, conf):
 # ==========================================
 # 4. HALAMAN UTAMA (MAIN UI)
 # ==========================================
-st.header("🔍 Analisis Kebenaran Berita")
+st.header("Analisis Kebenaran Berita Politik Indonesia")
 st.markdown("Tempelkan teks berita yang ingin Anda verifikasi di bawah ini.")
 
-# Input Area
-input_text = st.text_area("Isi Berita:", height=200, placeholder="Contoh: Pemerintah akan membagikan bantuan sosial sebesar 5 juta rupiah mulai besok...")
-
-col_btn, col_space = st.columns([1, 5])
-with col_btn:
-    tombol_analisis = st.button("🚀 Analisis Sekarang", type="primary", use_container_width=True)
+# Form Section
+with st.form(key="analisis_form"):
+    # Input Area
+    input_text = st.text_area(
+        "Isi Berita:", 
+        height=200, 
+        placeholder="Contoh: Pemerintah akan membagikan bantuan sosial sebesar 5 juta rupiah mulai besok..."
+    )
+    
+    # button submit
+    submit_button = st.form_submit_button(label="🚀 Analisis Sekarang", type="primary")
 
 # Logika Prediksi
-if tombol_analisis:
-    if input_text.strip():
-        try:
-            with st.spinner("Sedang memproses teks..."):
-                # 1. Preprocessing
-                text_vectorized = vectorizer.transform([input_text])
-                
-                # 2. Prediksi
-                prediksi = xgb_model.predict(text_vectorized)[0]
-                proba = xgb_model.predict_proba(text_vectorized)
-                
-                # 3. Mapping
-                labels = ["Fakta", "Hoax"] # Pastikan urutan ini sesuai training Anda (0/1)
-                hasil_label = labels[prediksi]
-                confidence = proba[0][prediksi] * 100
-                
-                # 4. Simpan ke History
-                simpan_riwayat(input_text, hasil_label, confidence)
-                st.toast("Analisis selesai! Disimpan ke Riwayat.", icon="💾")
-
-            # 5. Tampilkan Hasil dengan UI Menarik
-            st.markdown("---")
-            st.subheader("📊 Hasil Analisis")
-            
-            # Layout Hasil menggunakan Columns
-            res_col1, res_col2, res_col3 = st.columns([2, 1, 1])
-            
-            with res_col1:
-                if hasil_label == "Hoax":
-                    st.error(f"### 🚨 Terdeteksi: {hasil_label}")
-                    st.markdown("Berita ini memiliki indikasi kuat sebagai informasi palsu. Harap verifikasi sumber resminya.")
-                else:
-                    st.success(f"### ✅ Terdeteksi: {hasil_label}")
-                    st.markdown("Berita ini terindikasi sebagai informasi yang valid/fakta.")
-            
-            with res_col2:
-                st.metric("Confidence Score", f"{confidence:.1f}%")
-            
-            # with res_col3:
-            #     # Progress bar untuk visualisasi probabilitas HOAX
-            #     prob_hoax = proba[0][1] # Ambil probabilitas kelas 1 (Hoax)
-            #     st.write("**Skor Hoax:**")
-            #     st.progress(prob_hoax, text=f"{prob_hoax*100:.1f}%")
-
-        except Exception as e:
-            st.error(f"Terjadi kesalahan: {e}")
-    else:
+if submit_button:
+    # cek apakah kosong
+    if not input_text.strip():
         st.warning("Mohon isi teks berita terlebih dahulu.")
+    else:
+        # hitung jumlah kata
+        word_count = len(input_text.strip().split())
+        
+        # validasi minimal 100 kata
+        if word_count < 100:
+            st.error(f"❌ Teks harus minimal 100 kata. Saat ini Anda memiliki {word_count} kata.")
+            st.info(f"Silahkan tambahkan **{100 - word_count}** kata lagi agar analisis lebih akurat.")
+        else:
+            # proses analisis
+            try:
+                with st.spinner("Sedang memproses teks..."):
+                    # 1. Preprocessing
+                    text_vectorized = vectorizer.transform([input_text])
+                    
+                    # 2. Prediksi
+                    prediksi = xgb_model.predict(text_vectorized)[0]
+                    proba = xgb_model.predict_proba(text_vectorized)
+                    
+                    # 3. Mapping
+                    labels = ["Fakta", "Hoax"]
+                    hasil_label = labels[prediksi]
+                    confidence = proba[0][prediksi] * 100
+                    
+                    # 4. Simpan ke History
+                    simpan_riwayat(input_text, hasil_label, confidence)
+                    st.toast("Analisis selesai! Disimpan ke Riwayat.", icon="💾")
+
+                # 5. Tampilkan Hasil
+                st.markdown("---")
+                st.subheader("📊 Hasil Analisis")
+                
+                # Layout Hasil menggunakan Columns
+                res_col1, res_col2 = st.columns([2, 1])
+                
+                with res_col1:
+                    if hasil_label == "Hoax":
+                        st.error(f"### 🚨 Terdeteksi: {hasil_label}")
+                        st.markdown("Berita ini memiliki indikasi kuat sebagai informasi palsu. Harap verifikasi sumber resminya.")
+                    else:
+                        st.success(f"### ✅ Terdeteksi: {hasil_label}")
+                        st.markdown("Berita ini terindikasi sebagai informasi yang valid/fakta.")
+                
+                with res_col2:
+                    st.metric("Confidence Score", f"{confidence:.1f}%")
+
+            except Exception as e:
+                st.error(f"Terjadi kesalahan: {e}")
 
 # ==========================================
-# 5. SIDEBAR RIWAYAT (HISTORY)
+# 5. SIDEBAR HISTORY
 # ==========================================
 with st.sidebar:
     st.markdown("---")
@@ -143,3 +152,12 @@ with st.sidebar:
         st.dataframe(df_history, hide_index=True, use_container_width=True)
     else:
         st.info("Belum ada riwayat analisis.")
+        
+# troubleshoot
+# st.write(vectorizer)
+
+# st.write("Punya idf_?", hasattr(vectorizer, "idf_"))
+# if hasattr(vectorizer, "idf_"):
+#     st.write("Panjang idf_:", len(vectorizer.idf_))
+# else:
+#     st.write("idf_ TIDAK ADA (belum fit)")
